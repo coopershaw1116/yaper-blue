@@ -1,3 +1,6 @@
+COMMANDS:
+Typing /[username] followed by your message will send your message as a reply to that user instead of a regular message.
+
 WHAT YAPER DOES:
 YAPER creates a universal group chat over your WiFi's local IP network, allowing only YAPER users to send and receive messages. This makes it ideal for communication between
 multiple people across a large building or campus when mobile devices or mobile data are not available.
