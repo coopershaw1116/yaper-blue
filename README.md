@@ -7,7 +7,7 @@ multiple people across a large building or campus when mobile devices or mobile 
 
 USER WARNING:
 Do not send sensitive information such as passwords using this app. Messages are not encrypted and may be visible to technically skilled individuals on the same network,
-including your building's IT personnel or internet service provider (ISP). INADDITION this app will display the IP address it is sending messages FROM in at the top of the screen, if you are sharing your screen publically it is best to keep the YAPER window OFF of the shared screen.
+including your building's IT personnel or internet service provider (ISP). INADDITION depending on the version this app will either display the IP address it is sending messages from OR the IP of which it is sending to; at the top of the screen, if you are sharing your screen publically it is best to keep the YAPER window OFF of the shared screen.
 
 SCHOOL ADMINS READ THIS:
 If you are a school administrator concerned about the use of this app, please note that newer versions of YAPER include a built-in message cooldown and a maximum message length to prevent students from
