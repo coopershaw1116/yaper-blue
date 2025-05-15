@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -13,6 +15,9 @@ namespace yaper
         static UdpClient receiver;
         static HashSet<string> onlineUsers = new HashSet<string>();
         static string myName = "";
+        static DateTime lastMessageTime = DateTime.MinValue;
+        const int maxMessageLength = 200;
+        const int messageCooldownSeconds = 2;
 
         static void Main(string[] args)
         {
@@ -23,14 +28,15 @@ namespace yaper
             string targetIp = "255.255.255.255";
 
             receiver = new UdpClient(port);
-            Thread receiveThread = new Thread(ReceiveMessages);
-            receiveThread.IsBackground = true;
+            Thread receiveThread = new Thread(ReceiveMessages)
+            {
+                IsBackground = true
+            };
             receiveThread.Start();
 
             UdpClient sender = new UdpClient();
             sender.EnableBroadcast = true;
 
-            // Prompt user for display name and check for spaces
             while (true)
             {
                 Console.Write("YAPER ©2025. Enter a display name (no spaces allowed): ");
@@ -48,23 +54,44 @@ namespace yaper
                 }
             }
 
-            // Send ping to announce presence
+            // Get interface info and SSID
+            (string interfaceName, string localIp) = GetLocalInterfaceInfo();
+            string ssid = GetWifiSSID();
+
             byte[] userPing = Encoding.UTF8.GetBytes($"__PING::{myName}");
             sender.Send(userPing, userPing.Length, new IPEndPoint(IPAddress.Broadcast, port));
 
-            // Display the confirmation message
             Console.Clear();
-            Console.WriteLine($"YAPER ©2025. You can now start sending messages as {myName}. Go on, try it!");
+            Console.WriteLine($"YAPER ©2025. You can now start sending messages as {myName}.");
+            Console.WriteLine($"📡 Connected via: {interfaceName} ({localIp}) on Wi-Fi \"{ssid}\"\n");
 
             while (true)
             {
                 string input = Console.ReadLine()?.Trim();
                 if (string.IsNullOrEmpty(input)) continue;
 
-                int currentLineCursor2 = Console.CursorTop - 1;
-                Console.SetCursorPosition(0, currentLineCursor2);
+                if (input.Length > maxMessageLength)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"❌ Error: Message too long. Max length is {maxMessageLength} characters.");
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    continue;
+                }
+
+                if ((DateTime.Now - lastMessageTime).TotalSeconds < messageCooldownSeconds)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"⏳ Please wait {messageCooldownSeconds} seconds between messages.");
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    continue;
+                }
+
+                lastMessageTime = DateTime.Now;
+
+                int currentLineCursor = Console.CursorTop - 1;
+                Console.SetCursorPosition(0, currentLineCursor);
                 Console.Write(new string(' ', Console.WindowWidth));
-                Console.SetCursorPosition(0, currentLineCursor2);
+                Console.SetCursorPosition(0, currentLineCursor);
 
                 string formattedMessage;
 
@@ -128,6 +155,61 @@ namespace yaper
                     Console.WriteLine("Error receiving message.");
                 }
             }
+        }
+
+        static (string interfaceName, string ipAddress) GetLocalInterfaceInfo()
+        {
+            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus == OperationalStatus.Up &&
+                    ni.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                    ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+                {
+                    foreach (UnicastIPAddressInformation ip in ni.GetIPProperties().UnicastAddresses)
+                    {
+                        if (ip.Address.AddressFamily == AddressFamily.InterNetwork &&
+                            !IPAddress.IsLoopback(ip.Address))
+                        {
+                            return (ni.Name, ip.Address.ToString());
+                        }
+                    }
+                }
+            }
+            return ("Unknown Interface", "Unknown IP");
+        }
+
+        static string GetWifiSSID()
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "netsh",
+                    Arguments = "wlan show interfaces",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (Process process = Process.Start(psi))
+                {
+                    string output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+
+                    foreach (string line in output.Split('\n'))
+                    {
+                        if (line.TrimStart().StartsWith("SSID") && !line.TrimStart().StartsWith("SSID name"))
+                        {
+                            string[] parts = line.Split(new[] { ':' }, 2);
+                            if (parts.Length == 2)
+                                return parts[1].Trim();
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return "Unknown";
         }
     }
 }
