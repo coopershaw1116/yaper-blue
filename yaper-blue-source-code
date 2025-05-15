@@ -1,0 +1,133 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+
+namespace yaper
+{
+    class Program
+    {
+        static int port = 11000;
+        static UdpClient receiver;
+        static HashSet<string> onlineUsers = new HashSet<string>();
+        static string myName = "";
+
+        static void Main(string[] args)
+        {
+            Console.BackgroundColor = ConsoleColor.Black;
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Console.Clear();
+
+            string targetIp = "255.255.255.255";
+
+            receiver = new UdpClient(port);
+            Thread receiveThread = new Thread(ReceiveMessages);
+            receiveThread.IsBackground = true;
+            receiveThread.Start();
+
+            UdpClient sender = new UdpClient();
+            sender.EnableBroadcast = true;
+
+            // Prompt user for display name and check for spaces
+            while (true)
+            {
+                Console.Write("YAPER ©2025. Enter a display name (no spaces allowed): ");
+                myName = Console.ReadLine();
+
+                if (string.IsNullOrWhiteSpace(myName) || myName.Contains(" "))
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("❌ Error: Display name cannot be empty or contain spaces. Please try again.");
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            // Send ping to announce presence
+            byte[] userPing = Encoding.UTF8.GetBytes($"__PING::{myName}");
+            sender.Send(userPing, userPing.Length, new IPEndPoint(IPAddress.Broadcast, port));
+
+            // Display the confirmation message
+            Console.Clear();
+            Console.WriteLine($"YAPER ©2025. You can now start sending messages as {myName}. Go on, try it!");
+
+            while (true)
+            {
+                string input = Console.ReadLine()?.Trim();
+                if (string.IsNullOrEmpty(input)) continue;
+
+                int currentLineCursor2 = Console.CursorTop - 1;
+                Console.SetCursorPosition(0, currentLineCursor2);
+                Console.Write(new string(' ', Console.WindowWidth));
+                Console.SetCursorPosition(0, currentLineCursor2);
+
+                string formattedMessage;
+
+                if (input.StartsWith("/") && !input.StartsWith("//") && input.Contains(" "))
+                {
+                    int spaceIndex = input.IndexOf(' ');
+                    string targetUser = input.Substring(1, spaceIndex - 1);
+                    string messageBody = input.Substring(spaceIndex + 1).Trim();
+                    formattedMessage = $"[{DateTime.Now:hh:mm:ss tt}] {myName} > {targetUser}: {messageBody}";
+                }
+                else
+                {
+                    formattedMessage = $"[{DateTime.Now:hh:mm:ss tt}] {myName}: {input}";
+                }
+
+                byte[] data = Encoding.UTF8.GetBytes(formattedMessage);
+                sender.Send(data, data.Length, new IPEndPoint(IPAddress.Parse(targetIp), port));
+            }
+        }
+
+        static void ReceiveMessages()
+        {
+            IPEndPoint remoteEP = new IPEndPoint(IPAddress.Any, port);
+
+            while (true)
+            {
+                try
+                {
+                    byte[] data = receiver.Receive(ref remoteEP);
+                    string message = Encoding.UTF8.GetString(data);
+
+                    if (message.StartsWith("__PING::"))
+                    {
+                        string requester = message.Substring(8);
+                        if (requester != myName)
+                        {
+                            string pong = $"__PONG::{myName}";
+                            byte[] pongData = Encoding.UTF8.GetBytes(pong);
+                            using (UdpClient pongSender = new UdpClient())
+                            {
+                                pongSender.Send(pongData, pongData.Length, remoteEP);
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (message.StartsWith("__PONG::"))
+                    {
+                        string responder = message.Substring(8);
+                        if (responder != myName)
+                        {
+                            onlineUsers.Add(responder);
+                        }
+                        continue;
+                    }
+
+                    Console.WriteLine($"\n{message}");
+                }
+                catch
+                {
+                    Console.WriteLine("Error receiving message.");
+                }
+            }
+        }
+    }
+}
